@@ -381,7 +381,7 @@ class FCHWriter:
         self.build_journal(data['Journal'])
         self.build_appearance(data['Appearance'])
         self.build_active_food(data['ActiveFood'])
-        self.build_p_unknown4(data['Unknown3'])
+        self.build_p_unknown3(data['Unknown3'])
         self.build_skill_data(data['Skills'])
         self.build_checksum(data['Checksum'])
 
