@@ -3,12 +3,22 @@
 import binascii
 import struct
 
-class PrettyPrinter:
-    indent_lvl = 0
-    s_u32 = None
-    s_float = None
+class PPWrap:
+    def __init__(self, pp, label=None):
+        self.label = label
+        self.pp = pp
 
+    def __enter__(self):
+        self.pp.block(self.label)
+        return self.pp
+
+    def __exit__(self, exc_type, exc_value, exc_traceback):
+        self.pp.end_block()
+
+
+class PrettyPrinter:
     def __init__(self):
+        self.indent_lvl = 0
         self.s_u32 = struct.Struct("<I")
         self.s_float = struct.Struct("<f")
 
@@ -27,9 +37,12 @@ class PrettyPrinter:
     def indent(self):
         print("  " * self.indent_lvl, end='')
 
-    def println(self, s):
+    def println(self, first, *args):
         self.indent()
-        print(s)
+        print(first, end='')
+        for a in args:
+            print(' ', a, sep='', end='')
+        print('')
 
     def small_bytes(self, prefix, b):
         if (len(b) > 4):

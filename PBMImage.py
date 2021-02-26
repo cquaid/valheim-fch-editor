@@ -1,6 +1,8 @@
 # Copyright 2021-2021, cQuaid and the valheim-fch-editor contributors
 # SPDX-License-Identifier: MIT
 
+from LocalUtil import die
+
 def _consume_ws(f):
     got_ws = False
     while True:
@@ -39,7 +41,7 @@ def _get_integer(f, first=None):
             f.readline()
             break
         # Anything else is an error
-        raise ValueError("Bad character ({}) in PBM integer".format(c))
+        die("Bad character ({}) in PBM integer".format(c))
     return int(val)
 
 def _get_pixel(f, first=None):
@@ -50,7 +52,7 @@ def _get_pixel(f, first=None):
     # Validate that first is a bit.
     if first in '01':
         return int(first)
-    raise ValueError("Bad character ({}) in PBM pixel".format(first))
+    die("Bad character ({}) in PBM pixel".format(first))
 
 
 class PBMImage:
@@ -79,7 +81,7 @@ class PBMImage:
 
     def set_pixel(self, point, v):
         if v > 1:
-            raise ValueError("Cannot set PBM value >1 (Got: {})".format(v))
+            die("Cannot set PBM value >1 (Got: {})".format(v))
         # This will raise if outside of bounds.
         self.rows[point[1]][point[0]] = v
 
@@ -105,11 +107,11 @@ class PBMImage:
             # Check magic
             d = f.read(2)
             if d != 'P1':
-                raise RuntimeError('File {} is not a PBM'.format(path))
+                die('File {} is not a PBM'.format(path))
             # Expects a whitespace character
             t = _consume_ws(f)
             if not t[1]:
-                raise RuntimeError('File {} is not a PBM'.format(path))
+                die('File {} is not a PBM'.format(path))
             # Get width
             self.width = _get_integer(f, first = t[0])
             # Get Height, no first character. If we get here, we know the

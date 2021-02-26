@@ -1,45 +1,80 @@
 # FCH File Format
 
-The FCH format uses only a few data types, which is why some of the unknown
-blocks are broken up as they are.
-
 The following data types have been observed:
-* *u8* - 1-byte value, occasionally seen for booleans
-* *u32* - 4 byte integers are stored in little-endian
-* *float* - 4 byte floating point value
-* *str* - A u8 length followed by the string data (excluding a NUL-terminator)
+- *u8* - 1-byte value, occasionally seen for booleans
+- *i32* - 4 byte integers are stored in little-endian
+- *i64* - 8 byte integers stored in little-endian. Used for Player IDs
+- *float* - 4 byte floating point value
+- *string* - A u8 length followed by the string data (excluding a NUL-terminator)
 
-## Header
+The FCH format is sort of an amorphis stream that can change at any point.
 
-The header data is currently unknown, it's always 24 bytes long, likely broken up into 4-byte chunks.
+The file is split into two segments:
+1. File Data
+2. Checksum
+
+There is an i32 byte count prefixing each:
+| Type | Name | Description |
+| ---- | ---- | ----------- |
+| i32 | Data Size | Number of bytes in the data segment |
+| u8[DataSize] | Data Bytes | The data |
+| i32 | Checksum size |  Number of bytes in the checksum segment |
+| u8[ChecksumSize] | Checksum Bytes | SHA-512 Checksum value of the data segment |
+
+The Data Segment is further broken up into several chunks:
+1. Player Statistics
+2. World Data
+3. Player Data
+
+Each of these is detailed below.
+
+Note:
+- The checksum doesn't appear to be validated, it's just there.
+
+# Chunk 1: Player Statistics
+
+This chunk also contains the player version. At the time of writing, the player version is 33.
 
 | Type | Name | Description |
 | ---- | ---- | ----------- |
-| u8[4] | Unknown 1 | Unknown |
-| u8[4] | Unknown 2 | Unknown |
-| u8[4] | Unknown 3 | Unknown |
-| u8[4] | Unknown 4 | Unknown |
-| u8[4] | Unknown 5 | Unknown |
-| u8[4] | Unknown 6 | Unknown |
+| i32 | Version | Player Version (33) |
+| i32 | Kills | Number of kills |
+| i32 | Deaths | Number of deaths |
+| i32 | Crafts | Number of items crafter |
+| i32 | Builds | Number of structures built |
 
-## Minimap Block
+Notes:
+- The Kills, Deaths, Crafts, and Builds fields were introduced in Player Version 28
 
-This block is comprised of a Minimap Count followed by the minimap data for each entry.
-Each minimap in the block has a header, visibility data, and a list of map markers
+# Chunk 2: World Data
 
-| Type | Name | Description |
-| ---- | ---- | ----------- |
-| u32  | Count | Number of minimaps stored in the file |
-
-### Minimap Header
-
-68 bytes of unknown data; part, of which, might be the map seed or some form of identifier to pair the map data with an actual map file.
+The world data starts with a count. A character that has yet to load into any worlds has a count of 0.
 
 | Type | Name | Description |
 | ---- | ---- | ----------- |
-| u[68] | Unknown | Unknown |
+| i32  | Count | Number of minimaps stored in the file |
 
-### Minimap Visibility
+Each world in the segment has a header, visibility data, and a list of map markers
+
+## World Header
+
+| Type | Name | Description |
+| ---- | ---- | ----------- |
+| i64 | UID | World ID |
+| u8 | HaveSpawnPoint | Boolean: 1 if there's a custom spawn point; 0 otherwise |
+| float[3] | SpawnPoint | World Spawn point. (X,Y,Z) Note: Only present if HaveSpawnPoint is True |
+| u8 | HaveLogoutPoint | Boolean: 1 if there's a logout point; 0 otherwise |
+| float[3] LogoutPoint | World logout point. (X,Y,Z) Note: Only present if HaveLogoutPoint is True |
+| u8 | HaveDeathPoint | Boolean: 1 if there's a last death point; 0 otherwise |
+| float[3] | DeathPoint | Last death location. (X,Y,Z) Note: Only present if HaveDeathPoint is True |
+| float[3] | HomePoint | Player's home location (X,Y,Z). Always present |
+| u8 | HaveVisibilityData | If the world visibility data is included |
+
+Notes:
+- The HaveDeathPoint and DeathPoint fields were added in PlayerVersion 30
+- The HaveVisibilityData field and the world visibility data were added in PlayerVersion 29
+
+## World Visibility
 
 The visibility section starts with an Edge Length. Squaring this value gives the number of bytes used by the visibility data.
 
@@ -47,33 +82,39 @@ Each byte has one of two values:
 - 0: hidden/fog
 - 1: visible
 
-The map is stored as a series of EdgeLength rows with EdgeLength columns each.
+The visibility data is stored as a series of EdgeLength rows with EdgeLength columns each.
 The first row represents the bottom of the minimap, as seen on screen.
 Thus the rows are numbered: [EdgeLen-1, 0]
 
 | Type | Name | Description |
 | ---- | ---- | ----------- |
-| u32 | EdgeLen | Number of bytes for each edge of the minimap |
+| i32 | Version | Minimap version data (4) |
+| i32 | EdgeLen | Number of bytes for each edge of the minimap |
 | u8[EdgeLen*EdgeLen] | Visibility | Minimap visibility data |
+| i32 | MapMarkerCount | Number of map markers available |
+| u8[...] | MapMarkerList | Map Marker Data (see subsection) |
+| u8 | PublicPosition | Boolean: If position is broadcast publically on the minimap |
 
-### Minimap Markers
+Notes:
+- It looks like this chunk was added in file version 29?
+- PublicPosition was added in minimap version 4, file version 33
+
+### Minimap Markers (MapMarkerList)
 
 A list of the markers (mostly player-defined) on the minimap.
-A u32 count preceeds the marker entries.
+A i32 count preceeds the marker entries.
 
 *Header:*
 | Type | Name | Description |
 | ---- | ---- | ----------- |
-| u32 | Count | Number of minimap markers in the list |
+| i32 | Count | Number of minimap markers in the list |
 
 *Entries:*
 | Type | Name | Description |
 | ---- | ---- | ----------- |
 | string | Text | Marker text |
-| float | Coord1 | One of the coordinates for marker placement |
-| float | Unknown | Only populated for boss markers? |
-| float | Coord2 | One of the coordinates for marker placement |
-| u32 | Symbol | Which symbol is used (see below) |
+| float[3] | Location | (X,Y,Z) coordinates of the marker's location |
+| i32 | Symbol | Which symbol is used (see below) |
 | u8 | Strike | Boolean, if True: the symbol is Xed out |
 
 *Known Symbol Values:*
@@ -84,7 +125,11 @@ A u32 count preceeds the marker entries.
 - 0x04: Gate/Portal
 - 0x09: Boss marker
 
-## Player Block
+Notes:
+- There's no logical reason for the Location to be (X,Y,Z) when (X,Y) should be sufficient...
+- Oddly enough, the Z coordinate is used in place of Y for the marker position. Only Boss locations seem to set Y. My assumption is that they're using 3D coordinates mapped to a 2D plain, so (X,Z) are the map plain, with Y being height. The reason Y is set for Boss locations is that they're generated by the game and thus the true physical coordinates of the boss alter and not a sketchily placed marker from the player.
+
+## Chunk 3: Player Data
 
 The player data is pretty extensive and is broken up into several sections.
 
@@ -93,23 +138,32 @@ The player data is pretty extensive and is broken up into several sections.
 | Type | Name | Description |
 | ---- | ---- | ----------- |
 | string | Name | Player name |
-| u8[8] | ID | Some form of per-player ID. This, paired with the name, uniquely identifies a player |
-| u8[27] | Unknown | Unknown data |
+| i64 | ID | Player ID number |
+| u8 | StartSeedLen | Length (in bytes) of the start seed |
+| u8[StartSeedLen] | StartSeed | Starting seed, whatever this means |
+| u8 | HavePlayerData | Boolean, 1 if there's player data, 0 otherwise |
 
-### Giant Power
+Note: If HavePlayerData is False, then the remaining fields in this chunk do not exist.
 
-The currently "equipped" big-boss power.
+### Player Data (2)
 
 | Type | Name | Description |
 | ---- | ---- | ----------- |
-| string | Name | Which power is active, see below |
-| u8[4] | Unknown 1 | Related to the cooldown after use |
-| u8[4] | Unknown 2 | Unknown |
+| i32 | Version | Player data version (24) |
+| float | MaxHealth | Current maximum health (dependent on food, etc.) |
+| float | Health | Current health |
+| float | MaxStamina | Current maximum stamina (dependent on food, etc.) |
+| u8 | FirstSpawn | True (1) if this would be the characters first spawn into any world. 0 otherwise |
+| float | TimeSinceDeath | How long the player has been alive |
+| string | GuardianPowerName | Which guardian power is active (if any) |
+| float | GuardianPowerCooldown | Time remaining before the guardian power can be used again |
 
-*Known Power Names:*
-- GP_Eikthyr
-- GP_GDKing
-- GP_Bonemass
+Notes:
+- MaxStamina was introduced in Version 10
+- FirstSpawn was introduced in Version 8
+- TimeSinceDeath was introduced in Version 20
+- GuardianPowerName was introduced in Version 23
+- GuardianPowerCooldown was introduced in Version 24
 
 ### Inventory
 
@@ -118,31 +172,35 @@ Cautions:
 - Ensure all items are in unique slots (Row, Column) pairs
 - Ensure all items are in valid slots (Row: 0-3, Column: 0-7)
 
-
 *Header:*
 | Type | Name | Description |
 | ---- | ---- | ----------- |
-| u32 | Count | Number of inventory items |
+| i32 | Version | Inventory data version (103) |
+| i32 | Count | Number of inventory items |
 
 *Entries:*
 | Type | Name | Description |
 | ---- | ---- | ----------- |
 | string | Name | Item name/type |
-| u32 | Count | Stack count. Always 1 for equipment |
+| i32 | Count | Stack count. Always 1 for equipment |
 | float | Durability | Item Durability. Always 100.0 for non-equips. Often > 100 for equips. |
-| u32 | Column | Which colomn the item is in. Range: [0, 7] |
-| u32 | Row | Which row the item is in. Range: [0, 3] |
+| int[2] | Slot | Item slot (X,Y). X range: [0,7]; Y range: [0,3] |
 | u8 | Equipped | Boolean: 1 if item is equipped, 0 otherwise |
-| u32 | Level | Item level. Always 1 for non-equips |
-| u32 | Style | Paint style. Only used for shields, always 0 for non-shields |
-| u8[8] | CrafterID | ID of the player who crafted the item |
+| i32 | Level | Item level. Always 1 for non-equips |
+| i32 | Style | Paint style. Only used for shields, always 0 for non-shields |
+| i64 | CrafterID | ID of the player who crafted the item |
 | string | CrafterName | Name of the player who crafted the item |
+
+Notes:
+- Level was added in Inventory Version 101
+- Style was added in Inventory Version 102
+- CrafterID and CrafterName were added in InventoryVersion 103
 
 ### Known Recipes
 
 Recipes you've discovered.
 
-This is just a string table. It starts with a u32 count followed by a series of string entries.
+This is just a string table. It starts with a i32 count followed by a series of string entries.
 
 ### Crafting Stations
 
@@ -154,41 +212,56 @@ Highest level discovered/built for the upgradable crafting stations:
 *Header:*
 | Type | Name | Description |
 | ---- | ---- | ----------- |
-| u32 | Count | Number of entries in this list |
+| i32 | Count | Number of entries in this list |
 
 *Entries:*
 | Type | Name | Description |
 | ---- | ---- | ----------- |
 | string | Name | Station name |
-| u32 | Level | Highest level |
+| i32 | Level | Highest level |
 
-### Discovered Items
+### Discovered Materials
 
-Items you've made or picked up.
+Materials you've discovered (picked up).
 
-This is just a string table. It starts with a u32 count followed by a series of string entries.
+This is just a string table. It starts with a i32 count followed by a series of string entries.
 
-### Milestones (?)
+### Shown Tutorials
 
-I'm uncertain of what this is. I'm calling them "milestones", but they may be event names.
+Names of the tutorials you've interacted with.
 
-This is just a string table. It starts with a u32 count followed by a series of string entries.
+This is just a string table. It starts with a i32 count followed by a series of string entries.
 
-### Player Unknown 1
+### Discovered Uniques
 
-I have no clue what this is. It might be another string table, but I've only seen the count be 0.
+Unique items you've discovered (picked up).
 
-| Type | Name | Description |
-| ---- | ---- | ----------- |
-| u8[4] | Unknown | Always [ 0, 0, 0, 0 ]? |
+This is just a string table. It starts with a i32 count followed by a series of string entries.
 
 ### Trophies
 
 List of trophies you've picked up.
 
-This is just a string table. It starts with a u32 count followed by a series of string entries.
+This is just a string table. It starts with a i32 count followed by a series of string entries.
 
-### Player Unknown 2
+### Known Biomes
+
+Which biomes you've discovered.
+
+This is an i32 count followed by the i32 ID of each biome.
+
+The biome IDs appear to be single bits.
+
+*Known Biomes*
+- 1 = Meadows
+- 2 = Swamp
+- 4 = Mountains
+- 8 = Black Forest
+- 16 = Plains
+- 32 = Ashlands
+- 64 = Deep North
+- 256 = Ocean
+- 512 = Mistlands
 
 ### Journal
 
@@ -199,7 +272,7 @@ This is a fancier string table, each entry is two strings each.
 *Header:*
 | Type | Name | Description |
 | ---- | ---- | ----------- |
-| u32 | Count | Number of entries in this list |
+| i32 | Count | Number of entries in this list |
 
 *Entries:*
 | Type | Name | Description |
@@ -216,13 +289,9 @@ Notes:
 | ---- | ---- | ----------- |
 | string | Beard | Beard type name |
 | string | Hair | Hair type name |
-| float | c1 | Unknown, seems to be related to complexion |
-| float | c2 | Unknown, seems to be related to complexion |
-| float | c3 | Unknown, seems to be related to complexion |
-| float | u1 | Unknown |
-| float | u2 | Unknown |
-| float | u3 | Unknown, possibly the hair color |
-| u32 | Body Type | 0 for the male body, 1 for the female body |
+| float[3] | Complexion | Skin Color/Complexion. Looks like RGB, not HSV |
+| float[3] | HairColor | Hair Color/Blondness. Looks like RGB, not HSV |
+| i32 | BodyType | 0 for the male body, 1 for the female body |
 
 ### Active Food
 
@@ -234,34 +303,37 @@ Notes:
 *Header:*
 | Type | Name | Description |
 | ---- | ---- | ----------- |
-| u32 | Count | Number of entries in this list |
+| i32 | Count | Number of entries in this list |
 
 *Entries:*
 | Type | Name | Description |
 | ---- | ---- | ----------- |
 | string | Name | Food name |
-| float | Unknown 1 | Unknown, likely related to remaining time |
-| float | Unknown 2 | Unknown, likely related to remaining time |
+| float | Health | Remaining given health for this item |
+| float | Stamina | Remaining given stamina for this item |
 
-### Player Unknown 3
+Note:
+- The Health and Stamina values get smaller over time
 
-4-byte value. Not sure what this is, Always has the value 2? [ 0x02, 0x00, 0x00, 0x00 ]
-
-### SKills
+### Skills
 
 Skill data.
 
 *Header:*
 | Type | Name | Description |
 | ---- | ---- | ----------- |
-| u32 | Count | Number of entries in this list |
+| i32 | Version | Skills block version number |
+| i32 | Count | Number of entries in this list |
 
 *Entries:*
 | Type | Name | Description |
 | ---- | ---- | ----------- |
-| u32 | Type | Skill type/ID, see below |
-| float | Level | Whole number part: level; fractional part: experience percentage |
-| float | Unknown | Unknown |
+| i32 | Type | Skill type/ID, see below |
+| float | Level | Can be fractional. But it's all just the level! |
+| float | Experience | Accumulated experience |
+
+Notes:
+- The Experience field was added in Skills Version 2.
 
 *Known Skill Types:*
 - 0x01: Sword
@@ -272,19 +344,13 @@ Skill data.
 - 0x06: Blocking
 - 0x07: Axes
 - 0x08: Bows
+- 0x09: FireMagic
+- 0x0a: FrostMagic
 - 0x0b: Unarmed
 - 0x0c: Pickaxes
 - 0x0d: Woodcutting
-- 0x65: Sneaking
-- 0x66: Jumping
+- 0x64: Jump
+- 0x65: Sneak
+- 0x66: Run
 - 0x67: Swimming
-
-### Checksum (?)
-
-This looks like a checksum to me, just because it's 64-bytes long. But I haven't been able to calculate a SHA-512 checksum that matches this value and I've sliced the file a few different ways. This chunk ALWAYS updates it seems and I can't get a stable load of a character that doesn't modify some value yet. It's worth noting that if this *is* a checksum, they don't actual validate anything with it since modifying the file works fine.
-
-| Type | Name | Description |
-| ---- | ---- | ----------- |
-| u32 | Count | Number of bytes following |
-| u8[Count] | Checksum | The supposed checksum value |
 
