@@ -1,5 +1,6 @@
 # Copyright 2021-2021, cQuaid and the valheim-fch-editor contributors
 # SPDX-License-Identifier: MIT
+import array
 
 class WBitMatrix:
     """
@@ -33,7 +34,7 @@ class WBitMatrix:
 
         self.rows = []
         for r in range(h):
-            a = []
+            a = array.array("B")
             for c in range(w):
                 a.append(0)
             self.rows.append(a)
@@ -76,6 +77,10 @@ class WBitMatrix:
         return self._get(x, y)
 
     def fromBinary(self, binrdr):
+        """
+        1 byte per bit
+        """
+        # XXX: We could definitly optimize this
         for y in range(self.height):
             b = binrdr.read(self.width)
             for x in range(self.width):
@@ -83,6 +88,10 @@ class WBitMatrix:
         return
 
     def toBinary(self, binwr):
+        """
+        1 byte per bit
+        """
+        # XXX: We could definitly optimize this
         for y in range(self.height):
             for x in range(self.width):
                 binwr.write_u8(self._get(x, y))
