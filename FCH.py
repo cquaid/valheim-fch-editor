@@ -16,6 +16,7 @@ import BinReader
 import BinWriter
 import PBMImage
 import Valheim
+import WBitMatrix
 
 from LocalUtil import die, info
 from JDataAdaptor import JDataAdaptor
@@ -862,7 +863,7 @@ class FCH_WorldVisibility:
     def clear(self):
         self.version = self.CURRENT_VERSION
         self.edge_length = 0
-        self.pixel_bin = b''
+        self.pixel_data = WBitMatrix.WBitMatrix()
         self.marker_list = FCH_WorldMarkerList()
         self.public_position = False
 
@@ -873,7 +874,10 @@ class FCH_WorldVisibility:
             die("Unknown FCH world version:", self.version)
         info("World Version:", self.version)
         self.edge_length = binrdr.read_i32()
-        self.pixel_bin = binrdr.read(self.edge_length * self.edge_length)
+        # Load the visibility matrix data
+        self.pixel_data.set_dimensions(self.edge_length, self.edge_length)
+        self.pixel_data.fromBinary(binrdr)
+        # Load the marker list
         self.marker_list.fromBinary(binrdr, self.version)
         if self.version >= 4:
             self.public_position = binrdr.read_bool()
@@ -890,7 +894,7 @@ class FCH_WorldVisibility:
     def toBinary(self, binwr):
         binwr.write(self.CURRENT_VERSION)
         binwr.write(self.edge_length)
-        binwr.write_raw(self.pixel_bin)
+        self.pixel_data.toBinary(binwr)
         self.marker_list.toBinary(binwr)
         binwr.write(self.public_position)
         return
@@ -912,37 +916,22 @@ class FCH_WorldVisibility:
                 "Dimensions are not square.")
 
         self.edge_length = img.get_width()
-        self.pixel_bin = b''
-        pack_u8 = struct.Struct("<B")
-        for r in range(self.edge_length):
-            #print("Loading PBM row {}/{}...".format(r, self.edge_length))
-            # Optimization: loading each row into a temporary before appending
-            # to self.pixel_bin is a _significant_ speed improvement. I don't
-            # know why, but it's night and day.
-            r_bin = b''
-            for c in range(self.edge_length):
-                v = img.get_pixel((c, (self.edge_length - r - 1)))
-                r_bin += pack_u8.pack(v)
-            self.pixel_bin += r_bin
+        # We just steal the data from the PBM, no sense copying it.
+        self.pixel_data = img.get_matrix()
         info("Loading PBM succeeded.")
 
     def writePBM(self, pbm_path, overwrite=False):
         info("Attempting to write world data to PBM file...")
-        img = PBMImage.PBMImage(self.edge_length, self.edge_length)
-        index = 0
-        for r in range(self.edge_length):
-            for c in range(self.edge_length):
-                # Index into bytes() is an int().
-                v = self.pixel_bin[index]
-                index += 1
-                img.set_pixel((c, (self.edge_length - r - 1)), v)
+        img = PBMImage.PBMImage()
+        img.set_matrix(self.pixel_data)
         img.write(pbm_path, overwrite=overwrite)
         info("Writing PBM succeeded.")
 
     def printInfo(self, pp):
         pp.println("Visibility Info Version:", self.version)
         pp.println("Edge Length:", self.edge_length)
-        pp.println("Visibility Byte Count:", len(self.pixel_bin))
+        count = self.pixel_data.get_height() * self.pixel_data.get_width()
+        pp.println("Visibility Byte Count:", count)
         pp.println("Public Position On Map:", self.public_position)
         pp.println("Map Markers:")
         with PPWrap(pp):

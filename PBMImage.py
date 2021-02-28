@@ -1,6 +1,7 @@
 # Copyright 2021-2021, cQuaid and the valheim-fch-editor contributors
 # SPDX-License-Identifier: MIT
 
+import WBitMatrix
 from LocalUtil import die
 
 def _consume_ws(f):
@@ -56,37 +57,29 @@ def _get_pixel(f, first=None):
 
 
 class PBMImage:
-    width = 0
-    height = 0
-    rows = []
     def __init__(self, width=0, height=0):
-        self.width = width
-        self.height = height
-        if self.height != 0 and self.width != 0:
-            for y in range(self.height):
-                self.rows.append([])
-                for x in range(self.width):
-                    self.rows[y].append(0)
-        else:
-            # If one of them is 0, lazily set both to 0. We'll raise
-            # later on during a set or get operation
-            self.width = 0
-            self.height = 0
+        self.data = WBitMatrix.WBitMatrix(width, height)
 
     def get_width(self):
-        return self.width
+        return self.data.get_width()
 
     def get_height(self):
-        return self.height
+        return self.data.get_height()
 
-    def set_pixel(self, point, v):
-        if v > 1:
-            die("Cannot set PBM value >1 (Got: {})".format(v))
+    def set_pixel(self, x, y, v):
+        if (v < 0) or (v > 1):
+            die("Cannot set PBM value <0 or >1 (Got: {})".format(v))
         # This will raise if outside of bounds.
-        self.rows[point[1]][point[0]] = v
+        self.data.set(x, y, v, flipped=True)
 
-    def get_pixel(self, point):
-        return self.rows[point[1]][point[0]]
+    def get_pixel(self, x, y):
+        return self.data.get(x, y, flipped=True)
+
+    def get_matrix(self):
+        return self.data
+
+    def set_matrix(self, wbm):
+        self.data = wbm
 
     def write(self, path, overwrite = False):
         mode = 'x'
@@ -94,13 +87,15 @@ class PBMImage:
             mode = 'w'
         with open(path, mode) as f:
             # Header: P1 <width> <height>
-            f.write("P1\n{} {}\n".format(self.width, self.height))
+            width = self.get_width()
+            height = self.get_height()
+            f.write("P1\n{} {}\n".format(width, height))
             # Write each row as a new line
-            for y in range(self.height):
-                for x in range(self.width):
-                    f.write(str(self.rows[y][x]))
+            for y in range(height):
+                for x in range(width):
+                    f.write(str(self.get_pixel(x, y)))
                 f.write("\n")
-        # with
+        return
 
     def load(self, path):
         with open(path, 'r') as f:
@@ -113,21 +108,20 @@ class PBMImage:
             if not t[1]:
                 die('File {} is not a PBM'.format(path))
             # Get width
-            self.width = _get_integer(f, first = t[0])
+            width = _get_integer(f, first = t[0])
             # Get Height, no first character. If we get here, we know the
             # next character after the integer was a space/comment
-            self.height = _get_integer(f)
+            height = _get_integer(f)
             # Reset image pixel data
-            self.rows = []
+            self.data.set_dimensions(width, height)
             # Load the pixel data (automatically handles whitespace)
             #   Pixels are top-level to bottom-right with columns flowing
             #   left-to-right
-            for y in range(self.height):
-                self.rows.append([])
-                for x in range(self.width):
-                    self.rows[y].append(_get_pixel(f))
+            for y in range(height):
+                for x in range(width):
+                    self.data.set(x, y, _get_pixel(f), flipped=True)
             # PBM parsers are supposed to be lenient so we just ignore any
             # trailing data.
-        # with
+        return
 
 # vim:ts=4:sw=4:et
