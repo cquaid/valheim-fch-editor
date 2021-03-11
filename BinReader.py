@@ -1,14 +1,17 @@
 # Copyright 2021-2021, cQuaid and the valheim-fch-editor contributors
 # SPDX-License-Identifier: MIT
 import struct
-from LocalUtil import die
+from LocalUtil import *
 
 class BinReader:
     def __init__(self, filepath):
         self.file_handle = open(filepath, mode='rb')
         self.s_i32 = struct.Struct("<i")
+        self.s_u32 = struct.Struct("<I")
         self.s_i64 = struct.Struct("<q")
+        self.s_u64 = struct.Struct("<Q")
         self.s_float = struct.Struct("<f")
+        self.s_double = struct.Struct("<d")
         self.pos_stack = []
 
     def __del__(self):
@@ -69,6 +72,15 @@ class BinReader:
             return self._i32_single(pos=pos)
         return self._multi_read(self._i32_single, count, pos)
 
+    def _u32_single(self, pos=None):
+        b = self.read(4, pos=pos)
+        return self.s_u32.unpack(b)[0]
+
+    def read_u32(self, count=None, pos=None):
+        if count is None:
+            return self._u32_single(pos=pos)
+        return self._multi_read(self._u32_single, count, pos)
+
     def _i64_single(self, pos=None):
         b = self.read(8, pos=pos)
         return self.s_i64.unpack(b)[0]
@@ -78,6 +90,15 @@ class BinReader:
             return self._i64_single(pos=pos)
         return self._multi_read(self._i64_single, count, pos)
 
+    def _u64_single(self, pos=None):
+        b = self.read(8, pos=pos)
+        return self.s_u64.unpack(b)[0]
+
+    def read_u64(self, count=None, pos=None):
+        if count is None:
+            return self._u64_single(pos=pos)
+        return self._multi_read(self._u64_single, count, pos)
+
     def _float_single(self, pos=None):
         b = self.read(4, pos=pos)
         return self.s_float.unpack(b)[0]
@@ -86,6 +107,15 @@ class BinReader:
         if count is None:
             return self._float_single(pos)
         return self._multi_read(self._float_single, count, pos)
+
+    def _float_double(self, pos=None):
+        b = self.read(8, pos=pos)
+        return self.s_double.unpack(b)[0]
+
+    def read_double(self, count=None, pos=None):
+        if count is None:
+            return self._double_single(pos)
+        return self._multi_read(self._double_single, count, pos)
 
     def _u8_single(self, pos=None):
         b = self.read(1, pos=pos)
@@ -150,4 +180,4 @@ class BinReader:
             return self._str_single(pos=pos)
         return self._multi_read(self._str_single, count, pos)
 
-    # vim:ts=4:sw=4:et
+# vim:ts=4:sw=4:et

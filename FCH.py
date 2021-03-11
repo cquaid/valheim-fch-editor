@@ -18,11 +18,11 @@ import PBMImage
 import Valheim
 import WBitMatrix
 
-from LocalUtil import die, info
+from LocalUtil import *
 from JDataAdaptor import JDataAdaptor
 from PrettyPrinter import PrettyPrinter, PPWrap
 
-class FCH_InvItem:
+class FCH_InvItem(BinIFace, JSONIFace):
     def __init__(self):
         self.clear()
 
@@ -105,7 +105,7 @@ class FCH_InvItem:
         return
 
 
-class FCH_Inventory:
+class FCH_Inventory(BinIFace, JSONIFace):
     CURRENT_VERSION = 103
 
     def __init__(self):
@@ -161,7 +161,7 @@ class FCH_Inventory:
         return
 
 
-class FCH_CraftingStation:
+class FCH_CraftingStation(BinIFace, JSONIFace):
     def __init__(self):
         self.clear()
 
@@ -200,7 +200,7 @@ class FCH_CraftingStation:
         return
 
 
-class FCH_JournalEntry:
+class FCH_JournalEntry(BinIFace, JSONIFace):
     def __init__(self):
         self.clear()
 
@@ -237,7 +237,7 @@ class FCH_JournalEntry:
         return
 
 
-class FCH_Appearance:
+class FCH_Appearance(BinIFace, JSONIFace):
     def __init__(self):
         self.clear()
 
@@ -305,7 +305,7 @@ class FCH_Appearance:
         return
 
 
-class FCH_ActiveFood:
+class FCH_ActiveFood(BinIFace, JSONIFace):
     def __init__(self):
         self.clear()
 
@@ -348,7 +348,7 @@ class FCH_ActiveFood:
         return
 
 
-class FCH_Skill:
+class FCH_Skill(BinIFace, JSONIFace):
     def __init__(self):
        self.clear()
 
@@ -395,7 +395,7 @@ class FCH_Skill:
         pp.println("Experience:", self.exp)
         return
 
-class FCH_SkillList:
+class FCH_SkillList(BinIFace, JSONIFace):
     CURRENT_VERSION = 2
 
     def __init__(self):
@@ -447,16 +447,42 @@ class FCH_SkillList:
                 self.skills[i].printInfo(pp)
         return
 
+class FCH_Biome(BinIFace, JSONIFace):
+    def __init__(self):
+        self.clear()
 
-def _strtab_from_file(binrdr):
-    count = binrdr.read_i32()
-    return binrdr.read_str(count=count)
+    def clear(self):
+        self.biome_str = ""
 
-def _strtab_to_file(binwr, strtab):
-    binwr.write(len(strtab))
-    binwr.write_list(strtab)
+    def fromBinary(self, binrdr):
+        self.clear()
+        v = binrdr.read_i32()
+        self.biome_str = Valheim.BiomeType_i2a(v)
+        return
 
-class FCH_PlayerData:
+    def fromJSON(self, data):
+        self.clear()
+        if not isinstance(data, str):
+            raise TypeError("Invalid data type for Biome. Expected: 'str',",
+                            "Got:", type(data))
+        self.biome_str = data
+        return
+
+    def toBinary(self, binwr):
+        v = Valheim.BiomeType_a2i(self.biome_str)
+        binwr.write(v)
+        return
+
+    def toJSON(self):
+        return self.biome_str
+
+    def printInfo(self, pp):
+        pp.println("{} ({})".format(self.biome_str,
+                                    Valheim.BiomeType_a2i(self.biome_str)))
+        return
+
+
+class FCH_PlayerData(JSONIFace):
     CURRENT_VERSION = 24
 
     def __init__(self):
@@ -475,16 +501,16 @@ class FCH_PlayerData:
         self.gp_name = ""
         self.gp_cooldown = 0.0
         self.inventory = FCH_Inventory()
-        self.known_recipes = [] # str
-        self.known_stations = [] # FCH_CraftingStation
-        self.discovered_materials = [] # str
-        self.shown_tutorials = [] # str
-        self.discovered_uniques = [] # str
-        self.trophies = [] # str
-        self.known_biomes = [] # str (converted from i32)
-        self.journal = [] # FCH_Journal
-        self.appearance = FCH_Appearance() # FCH_Appearance
-        self.active_food = [] # FCH_ActiveFood
+        self.known_recipes = CountedList(str)
+        self.known_stations = CountedList(FCH_CraftingStation)
+        self.discovered_materials = CountedList(str)
+        self.shown_tutorials = CountedList(str)
+        self.discovered_uniques = CountedList(str)
+        self.trophies = CountedList(str)
+        self.known_biomes = CountedList(FCH_Biome)
+        self.journal = CountedList(FCH_JournalEntry)
+        self.appearance = FCH_Appearance()
+        self.active_food = CountedList(FCH_ActiveFood)
         self.skill_list = FCH_SkillList()
 
     def fromBinary(self, binrdr, file_version):
@@ -519,44 +545,20 @@ class FCH_PlayerData:
             self.gp_cooldown = binrdr.read_float()
 
         self.inventory.fromBinary(binrdr)
-        self.known_recipes = _strtab_from_file(binrdr)
-
-        # Known crafting stations
-        count = binrdr.read_i32()
-        for i in range(count):
-            v = FCH_CraftingStation()
-            v.fromBinary(binrdr)
-            self.known_stations.append(v)
-
-        self.discovered_materials = _strtab_from_file(binrdr)
-        self.shown_tutorials = _strtab_from_file(binrdr)
-        self.discovered_uniques = _strtab_from_file(binrdr)
-        self.trophies = _strtab_from_file(binrdr)
-
-        # Known biomes, just integers but we conver to string names.
-        count = binrdr.read_i32()
-        for i in range(count):
-            biome_int = binrdr.read_i32()
-            self.known_biomes.append( Valheim.BiomeType_i2a(biome_int) )
+        self.known_recipes.fromBinary(binrdr)
+        self.known_stations.fromBinary(binrdr)
+        self.discovered_materials.fromBinary(binrdr)
+        self.shown_tutorials.fromBinary(binrdr)
+        self.discovered_uniques.fromBinary(binrdr)
+        self.trophies.fromBinary(binrdr)
+        self.known_biomes.fromBinary(binrdr)
 
         # Journal entries
         if self.version >= 22:
-            count = binrdr.read_i32()
-            for i in range(count):
-                v = FCH_JournalEntry()
-                v.fromBinary(binrdr)
-                self.journal.append(v)
+            self.journal.fromBinary(binrdr)
 
         self.appearance.fromBinary(binrdr)
-
-        # Active food
-        count = binrdr.read_i32()
-        for i in range(count):
-            v = FCH_ActiveFood()
-            v.fromBinary(binrdr)
-            self.active_food.append(v)
-
-        # Skills
+        self.active_food.fromBinary(binrdr)
         self.skill_list.fromBinary(binrdr)
         return
 
@@ -574,39 +576,28 @@ class FCH_PlayerData:
             self.first_spawn = j.get_bool('FirstSpawn', False)
             self.time_since_death = j.get_float('TimeSinceDeath', 0.0)
 
-            self.known_recipes = j.get_list('KnownRecipes', str, [])
-            self.discovered_materials = j.get_list('DiscoveredMaterials', str,
-                                                   [])
-            self.shown_tutorials = j.get_list('ShownTutorials', str, [])
-            self.discovered_uniques = j.get_list('DiscoveredUniques', str, [])
-            self.trophies = j.get_list('Trophies', str, [])
+        tmp = {
+            'ActiveFood': self.active_food,
+            'Appearance': self.appearance,
+            'CraftingStations': self.known_stations,
+            'DiscoveredMaterials': self.discovered_materials,
+            'Inventory': self.inventory,
+            'Journal': self.journal,
+            'KnownBiomes': self.known_biomes,
+            'KnownRecipes': self.known_recipes,
+            'ShownTutorials': self.shown_tutorials,
+            'Skills': self.skill_list,
+            'Trophies': self.trophies,
+        }
 
-            self.known_biomes = j.get_list('KnownBiomes', str, [])
+        for (k,v) in tmp.items():
+            if k in data:
+                v.fromJSON(data[k])
+
         if 'GuardianPower' in data:
             with JDataAdaptor(data['GuardianPower']) as j:
                 self.gp_name = j.get_str('Name', '')
                 self.gp_cooldown = j.get_float('Cooldown', 0.0)
-        if 'Inventory' in data:
-            self.inventory.fromJSON(data['Inventory'])
-        if 'CraftingStations' in data:
-            for i in data['CraftingStations']:
-                v = FCH_CraftingStation()
-                v.fromJSON(i)
-                self.known_stations.append(v)
-        if 'Journal' in data:
-            for i in data['Journal']:
-                v = FCH_JournalEntry()
-                v.fromJSON(i)
-                self.journal.append(v)
-        if 'Appearance' in data:
-            self.appearance.fromJSON(data['Appearance'])
-        if 'ActiveFood' in data:
-            for i in data['ActiveFood']:
-                v = FCH_ActiveFood()
-                v.fromJSON(i)
-                self.active_food.append(v)
-        if 'Skills' in data:
-            self.skill_list.fromJSON(data['Skills'])
         return
 
     def toBinary(self, binwr):
@@ -630,36 +621,16 @@ class FCH_PlayerData:
         binwr.write(self.gp_cooldown)
 
         self.inventory.toBinary(binwr)
-        _strtab_to_file(binwr, self.known_recipes)
-
-        # Known crafting stations
-        binwr.write(len(self.known_stations))
-        for v in self.known_stations:
-            v.toBinary(binwr)
-
-        _strtab_to_file(binwr, self.discovered_materials)
-        _strtab_to_file(binwr, self.shown_tutorials)
-        _strtab_to_file(binwr, self.discovered_uniques)
-        _strtab_to_file(binwr, self.trophies)
-
-        # Known biomes, have to convert the strings back to ints.
-        binwr.write(len(self.known_biomes))
-        for v in self.known_biomes:
-            biome_int = Valheim.BiomeType_a2i(v)
-            binwr.write(biome_int)
-
-        # Journal entries
-        binwr.write(len(self.journal))
-        for v in self.journal:
-            v.toBinary(binwr)
-
+        self.known_recipes.toBinary(binwr)
+        self.known_stations.toBinary(binwr)
+        self.discovered_materials.toBinary(binwr)
+        self.shown_tutorials.toBinary(binwr)
+        self.discovered_uniques.toBinary(binwr)
+        self.trophies.toBinary(binwr)
+        self.known_biomes.toBinary(binwr)
+        self.journal.toBinary(binwr)
         self.appearance.toBinary(binwr)
-
-        # Active food
-        binwr.write(len(self.active_food))
-        for v in self.active_food:
-            v.toBinary(binwr)
-
+        self.active_food.toBinary(binwr)
         self.skill_list.toBinary(binwr)
 
         # Ending player data position
@@ -683,25 +654,19 @@ class FCH_PlayerData:
                 'Name': self.gp_name,
                 'Cooldown': self.gp_cooldown,
             },
-            'ActiveFood': [],
+            'ActiveFood': self.active_food.toJSON(),
             'Appearance': self.appearance.toJSON(),
             'Inventory': self.inventory.toJSON(),
             'Skills': self.skill_list.toJSON(),
-            'KnownBiomes': self.known_biomes,
-            'CraftingStations': [],
-            'KnownRecipes': self.known_recipes,
-            'DiscoveredMaterials': self.discovered_materials,
-            'ShownTutorials': self.shown_tutorials,
-            'DiscoveredUniques': self.discovered_uniques,
-            'Trophies': self.trophies,
-            'Journal': [],
+            'KnownBiomes': self.known_biomes.toJSON(),
+            'CraftingStations': self.known_stations.toJSON(),
+            'KnownRecipes': self.known_recipes.toJSON(),
+            'DiscoveredMaterials': self.discovered_materials.toJSON(),
+            'ShownTutorials': self.shown_tutorials.toJSON(),
+            'DiscoveredUniques': self.discovered_uniques.toJSON(),
+            'Trophies': self.trophies.toJSON(),
+            'Journal': self.journal.toJSON(),
         }
-        for i in self.active_food:
-            data['ActiveFood'].append(i.toJSON())
-        for i in self.journal:
-            data['Journal'].append(i.toJSON())
-        for i in self.known_stations:
-            data['CraftingStations'].append(i.toJSON())
         return data
 
     def printInfo(self, pp):
@@ -744,17 +709,17 @@ class FCH_PlayerData:
         pp.println("Skills:")
         with PPWrap(pp):
            self.skill_list.printInfo(pp)
-        pr_list_raw(pp, "Known Biomes:", self.known_biomes)
+        pr_list(pp, "Known Biomes:", self.known_biomes)
         pr_list(pp, "Crafting Stations:", self.known_stations)
         pr_list_raw(pp, "Known Recipes:", self.known_recipes)
         pr_list_raw(pp, "Discovered Materials:", self.discovered_materials)
-        pr_list_raw(pp, "Trophies", self.trophies)
+        pr_list_raw(pp, "Trophies:", self.trophies)
         pr_list_raw(pp, "Discovered Uniques:", self.discovered_uniques)
         pr_list(pp, "Journal:", self.journal)
         return
 
 
-class FCH_WorldMarker:
+class FCH_WorldMarker(JSONIFace):
     def __init__(self):
         self.clear()
 
@@ -807,7 +772,7 @@ class FCH_WorldMarker:
         pp.println("Crossed:", self.crossed)
 
 
-class FCH_WorldMarkerList:
+class FCH_WorldMarkerList(JSONIFace):
     def __init__(self):
         self.clear()
 
@@ -854,7 +819,7 @@ class FCH_WorldMarkerList:
         return
 
 
-class FCH_WorldVisibility:
+class FCH_WorldVisibility(BinIFace, JSONIFace):
     CURRENT_VERSION = 4
 
     def __init__(self):
@@ -1127,7 +1092,7 @@ class FCH_WorldManager:
         return
 
 
-class FCH_PlayerStats:
+class FCH_PlayerStats(BinIFace, JSONIFace):
     CURRENT_VERSION = 33
     
     def __init__(self):

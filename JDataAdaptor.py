@@ -1,7 +1,7 @@
 # Copyright 2021-2021, cQuaid and the valheim-fch-editor contributors
 # SPDX-License-Identifier: MIT
 import binascii
-from LocalUtil import die
+from LocalUtil import *
 
 class JDataAdaptor:
     """

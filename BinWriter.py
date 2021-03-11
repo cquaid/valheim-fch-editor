@@ -1,6 +1,7 @@
 # Copyright 2021-2021, cQuaid and the valheim-fch-editor contributors
 # SPDX-License-Identifier: MIT
 import struct
+from LocalUtil import BinIFace
 
 class BinWriter:
     def __init__(self, filepath, overwrite = False):
@@ -10,8 +11,11 @@ class BinWriter:
         self.file_handle = open(filepath, mode)
         self.s_u8 = struct.Struct("<B")
         self.s_i32 = struct.Struct("<i")
+        self.s_u32 = struct.Struct("<I")
         self.s_i64 = struct.Struct("<q")
+        self.s_u64 = struct.Struct("<Q")
         self.s_float = struct.Struct("<f")
+        self.s_double = struct.Struct("<d")
         self.pos_stack = []
 
     def __del__(self):
@@ -65,6 +69,8 @@ class BinWriter:
             self.write_i32(data, pos=pos)
         elif isinstance(data, float):
             self.write_float(data, pos=pos)
+        elif isinstance(data, BinIFace):
+            self.write_BinIFace(data, pos=pos)
         else:
             raise TypeError("Unhandled type: {}".format(type(data)))
 
@@ -72,8 +78,16 @@ class BinWriter:
         b = self.s_i32.pack(int(i))
         self.write_raw(b, pos=pos)
 
+    def write_u32(self, i, pos=None):
+        b = self.s_u32.pack(int(i))
+        self.write_raw(b, pos=pos)
+
     def write_i64(self, i, pos=None):
         b = self.s_i64.pack(int(i))
+        self.write_raw(b, pos=pos)
+
+    def write_u64(self, i, pos=None):
+        b = self.s_u64.pack(int(i))
         self.write_raw(b, pos=pos)
 
     def write_u8(self, c, pos=None):
@@ -86,6 +100,10 @@ class BinWriter:
 
     def write_float(self, f, pos=None):
         b = self.s_float.pack(f)
+        self.write_raw(b, pos=pos)
+
+    def write_double(self, f, pos=None):
+        b = self.s_double.pack(f)
         self.write_raw(b, pos=pos)
 
     def write_bool(self, b, pos=None):
@@ -125,5 +143,12 @@ class BinWriter:
             self.write(i)
         if pos is not None:
             self.pop_pos()
+
+    def write_BinIFace(self, bif, pos=None):
+        if pos is not None:
+            self.push_pos(pos)
+        bif.toBinary(self)
+        if pos is not None:
+            self.pop_pos(pos)
 
 # vim:ts=4:sw=4:et
